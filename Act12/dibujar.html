@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reconocimiento de Números</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            padding: 30px;
+            background: #f5f5f5;
+        }
+        canvas {
+            border: 3px solid #333;
+            background: black; /* Fondo negro como MNIST */
+            cursor: crosshair;
+        }
+        button {
+            margin-top: 12px;
+            padding: 8px 24px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+        /* Aquí se muestra el número predicho */
+        #resultado {
+            margin-top: 20px;
+            font-size: 100px;
+            font-weight: bold;
+            color: #1565C0;
+            min-height: 120px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Dibuja un número del 0 al 9</h2>
+    <p>Dibuja con el mouse — la predicción aparece al soltar</p>
+
+    <canvas id="canvas" width="280" height="280"></canvas>
+    <button onclick="limpiar()">Limpiar</button>
+
+    <p>El modelo predice:</p>
+    <div id="resultado">?</div>
+
+    <!-- jQuery para el envío AJAX, igual que piden las instrucciones -->
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js"
+            integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo="
+            crossorigin="anonymous">
+    </script>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let dibujando = false;
+
+        // Pincel blanco grueso sobre fondo negro — igual que MNIST
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 16;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Cuando el usuario presiona el mouse: empezar a dibujar
+        canvas.addEventListener('mousedown', (e) => {
+            dibujando = true;
+            ctx.beginPath();
+            ctx.moveTo(e.offsetX, e.offsetY);
+        });
+
+        // Mientras mueve el mouse: trazar la línea
+        canvas.addEventListener('mousemove', (e) => {
+            if (!dibujando) return;
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+        });
+
+        // Cuando SUELTA el mouse: esta es la función clave que pide el profesor
+        // Aquí se extraen los píxeles y se envían a Python
+        canvas.addEventListener('mouseup', () => {
+            dibujando = false;
+            enviarPixeles(); // <-- la función que el profesor describe en las instrucciones
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            if (dibujando) { dibujando = false; enviarPixeles(); }
+        });
+
+        function enviarPixeles() {
+            // El modelo espera 28x28, pero el canvas es 280x280
+            // Usamos un canvas temporal invisible para escalar la imagen
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 28;
+            tempCanvas.height = 28;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(canvas, 0, 0, 28, 28); // escalar de 280 a 28
+
+            // Extraer los 784 píxeles — exactamente el código de las instrucciones
+            var pixels = [];
+            for (var x = 0; x < 28; x++) {
+                for (var y = 0; y < 28; y++) {
+                    var imgData = tempCtx.getImageData(y, x, 1, 1);
+                    var data = imgData.data;
+                    // data[3] es el canal Alpha (transparencia): 0=vacío, 255=tinta
+                    // Dividimos entre 255 para normalizar de 0 a 1, igual que en Python
+                    var color = (data[3]) / 255;
+                    color = (Math.round(color * 100) / 100).toFixed(2);
+                    pixels.push(color);
+                }
+            }
+
+            // Enviar por POST a Python en el puerto 8000 — igual que las instrucciones
+            $.post("http://localhost:8000", { pixeles: pixels.join(",") },
+                function(response) {
+                    console.log("Resultado: " + response);
+                    // Mostrar el número predicho en el div #resultado
+                    $("#resultado").html(response);
+                }
+            );
+        }
+
+        function limpiar() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            $("#resultado").html("?");
+        }
+    </script>
+</body>
+</html>
